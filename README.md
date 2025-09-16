@@ -1,6 +1,5 @@
 # QBit: Customizable Table Views
-
-[![Build Status](https://circleci.com/gh/Kingsrook/qbit-customizable-table-views.svg?style=svg)](https://circleci.com/gh/Kingsrook/qbit-customizable-table-views)
+[![Build Status](https://dl.circleci.com/status-badge/img/gh/Kingsrook/qbit-customizable-table-views/tree/develop.svg?style=svg)](https://circleci.com/gh/Kingsrook/qbit-customizable-table-views)
 [![Maven Central](https://img.shields.io/maven-central/v/com.kingsrook.qbits/qbit-customizable-table-views.svg)](https://central.sonatype.com/namespace/com.kingsrook.qbits)
 [![Java](https://img.shields.io/badge/java-17+-blue.svg)](https://adoptium.net/)
 [![License](https://img.shields.io/badge/license-AGPL%203.0-green.svg)](LICENSE.txt)
