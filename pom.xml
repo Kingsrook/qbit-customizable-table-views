@@ -20,13 +20,16 @@
   ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-   <modelVersion>4.0.0</modelVersion>
+  <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+   <properties>
+      <revision>0.2.1</revision>
+   </properties>
 
    <parent>
       <groupId>com.kingsrook</groupId>
       <artifactId>qbit-build-parent</artifactId>
-      <version>1.1.0</version>
+      <version>1.4.0</version>
    </parent>
 
    <groupId>com.kingsrook.qbits</groupId>
@@ -37,6 +40,8 @@
    <name>QBit Customizable Table Views</name>
    <description>Customizable table views module for the QBit framework, providing table personalization and field/widget access control</description>
    <url>https://github.com/Kingsrook/qbit-customizable-table-views</url>
+
+   <modelVersion>4.0.0</modelVersion>
 
    <licenses>
       <license>
@@ -63,9 +68,12 @@
       <tag>HEAD</tag>
    </scm>
 
+<<<<<<< Updated upstream
    <properties>
       <revision>0.3.0-SNAPSHOT</revision>
    </properties>
+=======
+>>>>>>> Stashed changes
 
 
    <dependencyManagement>
