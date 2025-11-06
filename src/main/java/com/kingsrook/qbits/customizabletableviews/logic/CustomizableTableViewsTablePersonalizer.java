@@ -56,13 +56,16 @@ import com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepInpu
 import com.kingsrook.qqq.backend.core.model.actions.tables.QInputSource;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.get.GetInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryJoin;
+import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.DynamicDefaultValueBehavior;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QFieldSection;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
@@ -100,7 +103,6 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
       isTableCustomizableMemoization.clear();
       getEffectiveTableViewByUserMemoization.clear();
    }
-
 
 
 
@@ -153,7 +155,7 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
 
       if(tableView != null)
       {
-         return applyViewToTable(tableView, tableActionInput.getTable().clone());
+         return applyViewToTable(tableView, tableActionInput.getTable().clone(), tableActionInput);
       }
 
       return tableActionInput.getTable();
@@ -164,7 +166,7 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
    /***************************************************************************
     *
     ***************************************************************************/
-   QTableMetaData applyViewToTable(TableView tableView, QTableMetaData cloneTable)
+   QTableMetaData applyViewToTable(TableView tableView, QTableMetaData cloneTable, AbstractTableActionInput tableActionInput)
    {
       Map<String, QFieldMetaData> cloneFields = cloneTable.getFields();
       if(cloneFields == null)
@@ -175,9 +177,10 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
 
       Map<String, QFieldMetaData> fieldsToKeep = new LinkedHashMap<>();
 
-      ///////////////////////////////////////////
-      // figure out which fields the user gets //
-      ///////////////////////////////////////////
+      /////////////////////////////////////////////
+      // figure out which fields the user gets   //
+      // start with ones in the user's TableView //
+      /////////////////////////////////////////////
       for(TableViewField tableViewField : CollectionUtils.nonNullList(tableView.getFields()))
       {
          try
@@ -201,19 +204,39 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
          }
       }
 
-      ///////////////////////////////////////////////////////////
-      // always keep the primary key field and required fields //
-      ///////////////////////////////////////////////////////////
-      Set<String> requiredAndPrimaryKeyFields = new HashSet<>();
+      /////////////////////////////////////////////
+      // next look for ones that always get kept //
+      /////////////////////////////////////////////
+      boolean isInsertOrUpdate = (tableActionInput instanceof InsertInput) || (tableActionInput instanceof UpdateInput);
       for(QFieldMetaData field : cloneTable.getFields().values())
       {
          String fieldName = field.getName();
+         if(fieldsToKeep.containsKey(fieldName))
+         {
+            continue;
+         }
+
+         DynamicDefaultValueBehavior x    = null;
+         boolean                     keep = false;
          if(field.getIsRequired() || Objects.equals(fieldName, cloneTable.getPrimaryKeyField()))
          {
-            if(!fieldsToKeep.containsKey(fieldName))
-            {
-               fieldsToKeep.put(fieldName, cloneFields.get(fieldName));
-            }
+            ///////////////////////////////////////////////////////////
+            // always keep the primary key field and required fields //
+            ///////////////////////////////////////////////////////////
+            keep = true;
+         }
+         else if(isInsertOrUpdate && field.getBehaviorOnlyIfSet(DynamicDefaultValueBehavior.class) != null)
+         {
+            //////////////////////////////////////////////////////////////////////////////////////////////////////
+            // if this is for an insert or update, then keep any fields that have a DynamicDefaultValueBehavior //
+            // e.g., createDates, modifyDates, things that capture userId                                       //
+            //////////////////////////////////////////////////////////////////////////////////////////////////////
+            keep = true;
+         }
+
+         if(keep)
+         {
+            fieldsToKeep.put(fieldName, cloneFields.get(fieldName));
          }
       }
 

@@ -44,6 +44,8 @@ import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.actions.AbstractTableActionInput;
+import com.kingsrook.qqq.backend.core.model.actions.metadata.TableMetaDataInput;
 import com.kingsrook.qqq.backend.core.model.actions.metadata.personalization.TableMetaDataPersonalizerInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.QInputSource;
 import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
@@ -51,6 +53,9 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.insert.InsertInput;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.DynamicDefaultValueBehavior;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
@@ -400,13 +405,15 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
       CustomizableTableViewsTablePersonalizer personalizer = new CustomizableTableViewsTablePersonalizer();
       QTableMetaData                          tableMetaData;
 
+      TableMetaDataInput tableActionInput = new TableMetaDataInput();
+
       ///////////////////////////
       // empty with empty case //
       ///////////////////////////
       tableMetaData = personalizer.applyViewToTable(
          new TableView(),
-         new QTableMetaData()
-      );
+         new QTableMetaData(),
+         tableActionInput);
       assertThat(tableMetaData.getFields()).isNullOrEmpty();
       assertThat(tableMetaData.getSections()).isNullOrEmpty();
 
@@ -426,7 +433,7 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
       ////////////////////////////////////////////////////////////////////////////////
       tableMetaData = personalizer.applyViewToTable(
          new TableView().withFields(List.of()),
-         baseTable.clone());
+         baseTable.clone(), tableActionInput);
 
       assertEquals(2, tableMetaData.getFields().size());
       QFieldMetaDataAssert.assertThat(tableMetaData.getField("id")).isNotHidden().isNotEditable().isNotRequired();
@@ -449,7 +456,7 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
             new TableViewField().withFieldName("x.mandatory").withAccessLevel(EDITABLE_OPTIONAL),
             new TableViewField().withFieldName("x.optional").withAccessLevel(EDITABLE_OPTIONAL)
          )),
-         baseTable.clone());
+         baseTable.clone(), tableActionInput);
 
       assertEquals(4, tableMetaData.getFields().size());
       QFieldMetaDataAssert.assertThat(tableMetaData.getField("id")).isNotHidden().isNotEditable().isNotRequired();
@@ -478,10 +485,62 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
          new TableView().withWidgets(List.of(
             new TableViewWidget().withWidgetName("lilWidgy").withAccessLevel(WidgetAccessLevel.HAS_ACCESS)
          )),
-         baseTable.clone());
+         baseTable.clone(), tableActionInput);
       assertEquals(2, tableMetaData.getFields().size());
       assertEquals(3, tableMetaData.getSections().size()); // one for id, one for mandatory, and 1 for our widget
       assertEquals(List.of("s0", "s1", "w0"), tableMetaData.getSections().stream().map(s -> s.getName()).toList());
+   }
+
+
+
+   /*******************************************************************************
+    **
+    *******************************************************************************/
+   @Test
+   void testDynamicDefaultValueFields()
+   {
+      ///////////////////////////
+      // empty with empty case //
+      ///////////////////////////
+      QTableMetaData baseTable = new QTableMetaData()
+         .withPrimaryKeyField("id")
+         .withField(new QFieldMetaData("id", QFieldType.STRING).withIsEditable(false))
+         .withField(new QFieldMetaData("secret", QFieldType.STRING).withIsHidden(true))
+         .withField(new QFieldMetaData("mandatory", QFieldType.STRING).withIsRequired(true))
+         .withField(new QFieldMetaData("createDate", QFieldType.DATE_TIME).withBehavior(DynamicDefaultValueBehavior.CREATE_DATE))
+         .withField(new QFieldMetaData("optional", QFieldType.STRING))
+         .withSection(SectionFactory.defaultT1("id").withName("s0"))
+         .withSection(SectionFactory.defaultT2("secret", "mandatory").withName("s1"))
+         .withSection(SectionFactory.defaultT2("optional", "createDate").withName("s2"));
+
+      ////////////////////////////////////////////////////////////////////////
+      // for actions that aren't insert or update, just get pkey & required //
+      ////////////////////////////////////////////////////////////////////////
+      for(AbstractTableActionInput actionInput : List.of(new QueryInput(), new DeleteInput(), new TableMetaDataInput()))
+      {
+         QTableMetaData tableMetaData = new CustomizableTableViewsTablePersonalizer().applyViewToTable(
+            new TableView().withFields(List.of()),
+            baseTable.clone(), actionInput);
+
+         assertEquals(2, tableMetaData.getFields().size());
+         QFieldMetaDataAssert.assertThat(tableMetaData.getField("id")).isNotNull();
+         QFieldMetaDataAssert.assertThat(tableMetaData.getField("mandatory")).isNotNull();
+      }
+
+      /////////////////////////////////////////////////////
+      // for insert or update action, get createDate too //
+      /////////////////////////////////////////////////////
+      for(AbstractTableActionInput actionInput : List.of(new InsertInput(), new UpdateInput()))
+      {
+         QTableMetaData tableMetaData = new CustomizableTableViewsTablePersonalizer().applyViewToTable(
+            new TableView().withFields(List.of()),
+            baseTable.clone(), actionInput);
+
+         assertEquals(3, tableMetaData.getFields().size());
+         QFieldMetaDataAssert.assertThat(tableMetaData.getField("id")).isNotNull();
+         QFieldMetaDataAssert.assertThat(tableMetaData.getField("mandatory")).isNotNull();
+         QFieldMetaDataAssert.assertThat(tableMetaData.getField("createDate")).isNotNull();
+      }
    }
 
 
