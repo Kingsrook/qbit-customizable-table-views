@@ -294,7 +294,9 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
          {
             Set<Integer> roleIds = Arrays.stream(roleIdsString.split(",")).map(Integer::parseInt).collect(Collectors.toSet());
             tableViews = new QueryAction().execute(new QueryInput(TableView.TABLE_NAME)
-                  .withFilter(new QQueryFilter().withCriteria(new QFilterCriteria(TableViewRoleInt.TABLE_NAME + ".roleId", QCriteriaOperator.IN, roleIds)))
+                  .withFilter(new QQueryFilter()
+                     .withCriteria(new QFilterCriteria(TableViewRoleInt.TABLE_NAME + ".roleId", QCriteriaOperator.IN, roleIds))
+                     .withCriteria(new QFilterCriteria(CustomizableTable.TABLE_NAME + ".tableName", QCriteriaOperator.EQUALS, tableName)))
                   .withQueryJoin(new QueryJoin(TableViewRoleInt.TABLE_NAME))
                   .withIncludeAssociations(true))
                .getRecords();
