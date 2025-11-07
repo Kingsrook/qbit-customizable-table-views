@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  qqq-orb: kingsrook/qqq-orb@0.3.8
+  qqq-orb: kingsrook/qqq-orb@0.3.12
 
 workflows:
 
@@ -13,7 +13,7 @@ workflows:
             branches:
               ignore: /(develop|main|release/.*|hotfix/.*|integration.*)/
             tags:
-              only: []  
+              only: []
 
   publish_snapshot:
     jobs:
