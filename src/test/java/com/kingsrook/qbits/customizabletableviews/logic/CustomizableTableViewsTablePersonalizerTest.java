@@ -267,8 +267,10 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
    {
       CustomizableTableViewsTablePersonalizer personalizer = new CustomizableTableViewsTablePersonalizer();
 
-      String tableWithoutDefaultView = "tableWithoutDefaultView";
-      String tableWithDefaultView    = "tableWithDefaultView";
+      String  tableWithoutDefaultView   = "tableWithoutDefaultView";
+      String  tableWithDefaultView      = "tableWithDefaultView";
+      Integer tableWithoutDefaultViewId = 1;
+      Integer tableWithDefaultViewId    = 2;
 
       QContext.getQInstance().addTable(new QTableMetaData()
          .withName(tableWithDefaultView)
@@ -277,8 +279,8 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
          .withField(new QFieldMetaData("c", QFieldType.STRING)));
 
       new InsertAction().execute(new InsertInput(CustomizableTable.TABLE_NAME).withRecordEntities(List.of(
-         new CustomizableTable().withId(1).withTableName(tableWithoutDefaultView).withDefaultTableViewId(null),
-         new CustomizableTable().withId(2).withTableName(tableWithDefaultView).withDefaultTableViewId(1)
+         new CustomizableTable().withId(tableWithoutDefaultViewId).withTableName(tableWithoutDefaultView).withDefaultTableViewId(null),
+         new CustomizableTable().withId(tableWithDefaultViewId).withTableName(tableWithDefaultView).withDefaultTableViewId(1)
       )));
 
       //////////////////////
@@ -298,6 +300,13 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
       QContext.getQSession().setValue("roleIds", "");
       assertEmptyView(personalizer.getEffectiveTableViewForCurrentSession(tableWithoutDefaultView));
 
+      /////////////////////////////////////////////////////////////////////////////////////////////////
+      // put roles in session - there still aren't any view-role-int's for this table, so empty view //
+      /////////////////////////////////////////////////////////////////////////////////////////////////
+      QContext.getQSession().setUser(new QUser().withIdReference(UUID.randomUUID().toString()));
+      QContext.getQSession().setValue("roleIds", "1,2");
+      assertEmptyView(personalizer.getEffectiveTableViewForCurrentSession(tableWithoutDefaultView));
+
       //////////////////////////////////////////////////////////////////////////////////////
       // this table has a defaultViewId, but that view doesn't exist, so get null for now //
       //////////////////////////////////////////////////////////////////////////////////////
@@ -305,30 +314,23 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
       QContext.getQSession().setValue("roleIds", null);
       assertEmptyView(personalizer.getEffectiveTableViewForCurrentSession(tableWithDefaultView));
 
-      /////////////////////
-      // insert the view //
-      /////////////////////
+      ////////////////////////////////////////////////
+      // insert that default view, and a few others //
+      ////////////////////////////////////////////////
       new InsertAction().execute(new InsertInput(TableView.TABLE_NAME).withRecordEntities(List.of(
-         new TableView().withId(1).withCustomizableTableId(2).withName("a").withFields(List.of(new TableViewField().withFieldName(tableWithDefaultView + ".a").withAccessLevel(EDITABLE_OPTIONAL))),
-         new TableView().withId(2).withCustomizableTableId(2).withName("b").withFields(List.of(new TableViewField().withFieldName(tableWithDefaultView + ".b").withAccessLevel(EDITABLE_OPTIONAL))),
-         new TableView().withId(3).withCustomizableTableId(2).withName("c").withFields(List.of(new TableViewField().withFieldName(tableWithDefaultView + ".c").withAccessLevel(EDITABLE_OPTIONAL)))
+         new TableView().withId(1).withCustomizableTableId(tableWithDefaultViewId).withName("a").withFields(List.of(new TableViewField().withFieldName(tableWithDefaultView + ".a").withAccessLevel(EDITABLE_OPTIONAL))),
+         new TableView().withId(2).withCustomizableTableId(tableWithDefaultViewId).withName("b").withFields(List.of(new TableViewField().withFieldName(tableWithDefaultView + ".b").withAccessLevel(EDITABLE_OPTIONAL))),
+         new TableView().withId(3).withCustomizableTableId(tableWithDefaultViewId).withName("c").withFields(List.of(new TableViewField().withFieldName(tableWithDefaultView + ".c").withAccessLevel(EDITABLE_OPTIONAL)))
       )));
 
-      ///////////////////////
-      // now we can get it //
-      ///////////////////////
+      ////////////////////////////////////////////////////
+      // now we can get the default view for this table //
+      ////////////////////////////////////////////////////
       QContext.getQSession().setUser(new QUser().withIdReference(UUID.randomUUID().toString()));
       QContext.getQSession().setValue("roleIds", null);
       assertThat(personalizer.getEffectiveTableViewForCurrentSession(tableWithDefaultView))
          .isNotNull()
          .extracting("name").isEqualTo("a");
-
-      /////////////////////////////////////////////////////////////
-      // put roles in session - but fail to find a view-role-int //
-      /////////////////////////////////////////////////////////////
-      QContext.getQSession().setUser(new QUser().withIdReference(UUID.randomUUID().toString()));
-      QContext.getQSession().setValue("roleIds", "1,2");
-      assertEmptyView(personalizer.getEffectiveTableViewForCurrentSession(tableWithoutDefaultView));
 
       ///////////////////////////////
       // build some view-role ints //
@@ -344,7 +346,7 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
       //////////////////////////////////////////
       QContext.getQSession().setUser(new QUser().withIdReference(UUID.randomUUID().toString()));
       QContext.getQSession().setValue("roleIds", "1");
-      assertThat(personalizer.getEffectiveTableViewForCurrentSession(tableWithoutDefaultView))
+      assertThat(personalizer.getEffectiveTableViewForCurrentSession(tableWithDefaultView))
          .isNotNull()
          .extracting("name").isEqualTo("a");
 
@@ -353,23 +355,20 @@ class CustomizableTableViewsTablePersonalizerTest extends BaseTest
       ////////////////////////////////////////////////////
       QContext.getQSession().setUser(new QUser().withIdReference(UUID.randomUUID().toString()));
       QContext.getQSession().setValue("roleIds", "2");
-      assertThat(personalizer.getEffectiveTableViewForCurrentSession(tableWithoutDefaultView))
+      assertThat(personalizer.getEffectiveTableViewForCurrentSession(tableWithDefaultView))
          .isNotNull()
          .extracting("name").isEqualTo("b");
 
       /////////////////////////////////////////////////////////////////////////////
       // find 2 views (and when they merge, their name is lost) through role int //
+      // do this last lookup twice, clearing memory record store                 //
+      // in between to demonstrate memoization being used.                       //
       /////////////////////////////////////////////////////////////////////////////
       QContext.getQSession().setUser(new QUser().withIdReference(UUID.randomUUID().toString()));
       QContext.getQSession().setValue("roleIds", "2,3");
-
-      /////////////////////////////////////////////////////////////
-      // do this last lookup twice, clearing memory record store //
-      // in between to demonstrate memoization being used.       //
-      /////////////////////////////////////////////////////////////
       for(int i = 0; i < 2; i++)
       {
-         TableView effectiveTableViewForCurrentSession = personalizer.getEffectiveTableViewForCurrentSession(tableWithoutDefaultView);
+         TableView effectiveTableViewForCurrentSession = personalizer.getEffectiveTableViewForCurrentSession(tableWithDefaultView);
          assertThat(effectiveTableViewForCurrentSession)
             .isNotNull()
             .extracting("name").isNull();
