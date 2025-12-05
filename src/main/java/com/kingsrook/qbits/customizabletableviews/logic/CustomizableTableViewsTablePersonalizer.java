@@ -25,8 +25,10 @@ package com.kingsrook.qbits.customizabletableviews.logic;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +68,7 @@ import com.kingsrook.qqq.backend.core.model.actions.tables.update.UpdateInput;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.DynamicDefaultValueBehavior;
+import com.kingsrook.qqq.backend.core.model.metadata.fields.FieldAndJoinTable;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QFieldSection;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
@@ -168,6 +171,135 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
     ***************************************************************************/
    QTableMetaData applyViewToTable(TableView tableView, QTableMetaData cloneTable, AbstractTableActionInput tableActionInput)
    {
+      Map<String, QFieldMetaData> fieldsToKeep = getFieldsToKeepForTable(tableView, cloneTable, tableActionInput);
+      cloneTable.setFields(fieldsToKeep);
+
+      ///////////////////////////////////////////////////////////
+      // remove field names which aren't present from sections //
+      ///////////////////////////////////////////////////////////
+      for(QFieldSection section : CollectionUtils.nonNullList(cloneTable.getSections()))
+      {
+         Map<String, Set<String>> getFieldsToKeepFromJoinTableCache = null;
+
+         Iterator<String> fieldListIterator = CollectionUtils.nonNullList(section.getFieldNames()).iterator();
+         while(fieldListIterator.hasNext())
+         {
+            try
+            {
+               String            fieldName         = fieldListIterator.next();
+               FieldAndJoinTable fieldAndJoinTable = FieldAndJoinTable.get(cloneTable, fieldName);
+
+               if(fieldAndJoinTable.joinTable().getName().equals(cloneTable.getName()))
+               {
+                  ////////////////////////////////////////////////////////////////////////////////////////////
+                  // if the field is from this table, then remove it unless it's in the set of ones to keep //
+                  ////////////////////////////////////////////////////////////////////////////////////////////
+                  if(!fieldsToKeep.containsKey(fieldName))
+                  {
+                     fieldListIterator.remove();
+                  }
+               }
+               else
+               {
+                  getFieldsToKeepFromJoinTableCache = Objects.requireNonNullElseGet(getFieldsToKeepFromJoinTableCache, HashMap::new);
+
+                  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                  // else the field is from a join table - get that join table's allowed fields for the user, and keep or remove based on that //
+                  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                  Set<String> fieldsToKeepFromJoinTable = getFieldsToKeepFromJoinTable(fieldAndJoinTable.joinTable().getName(), tableActionInput, getFieldsToKeepFromJoinTableCache);
+                  if(!fieldsToKeepFromJoinTable.contains(fieldAndJoinTable.field().getName()))
+                  {
+                     fieldListIterator.remove();
+                  }
+               }
+            }
+            catch(Exception e)
+            {
+               /////////////////////////////////////////////////////////
+               // an unknown field, let's assume it should be removed //
+               /////////////////////////////////////////////////////////
+               fieldListIterator.remove();
+            }
+         }
+      }
+
+      //////////////////////////////////////////////////////////
+      // remove sections that had all of their fields removed //
+      //////////////////////////////////////////////////////////
+      CollectionUtils.nonNullList(cloneTable.getSections()).removeIf(section ->
+         section.getFieldNames() != null && section.getFieldNames().isEmpty() && !StringUtils.hasContent(section.getWidgetName()));
+
+      //////////////////////////////////////
+      // figure out which widgets we keep //
+      //////////////////////////////////////
+      Set<String> widgetsToKeep = new HashSet<>();
+      for(TableViewWidget tableViewWidget : CollectionUtils.nonNullList(tableView.getWidgets()))
+      {
+         try
+         {
+            String widgetName = tableViewWidget.getWidgetName();
+            widgetsToKeep.add(widgetName);
+         }
+         catch(Exception e)
+         {
+            LOG.warn("Error processing tableViewWidget", e, logPair("widgetName", tableViewWidget.getWidgetName()));
+         }
+      }
+
+      //////////////////////////////////////////////////////
+      // remove sections w/widgets that we aren't keeping //
+      //////////////////////////////////////////////////////
+      if(cloneTable.getSections() != null)
+      {
+         cloneTable.getSections().removeIf(section -> section.getWidgetName() != null && !widgetsToKeep.contains(section.getWidgetName()));
+      }
+
+      return (cloneTable);
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   private Set<String> getFieldsToKeepFromJoinTable(String joinTableName, AbstractTableActionInput tableActionInput, Map<String, Set<String>> getFieldsToKeepFromJoinTableCache)
+   {
+      return (getFieldsToKeepFromJoinTableCache.computeIfAbsent(joinTableName, k ->
+      {
+         try
+         {
+            if(isTableCustomizable(joinTableName))
+            {
+               ////////////////////////////////////////////////////////////////
+               // if the table is customizable, return set of fields to keep //
+               ////////////////////////////////////////////////////////////////
+               QTableMetaData joinTableClone = QContext.getQInstance().getTable(joinTableName).clone();
+               TableView      joinTableView  = getEffectiveTableViewForCurrentSession(joinTableName);
+               Map<String, QFieldMetaData> joinTableFieldsToKeep = getFieldsToKeepForTable(joinTableView, joinTableClone, tableActionInput);
+               return joinTableFieldsToKeep.keySet();
+            }
+            else
+            {
+               ///////////////////////////////////////////////
+               // else, not customizable, return all fields //
+               ///////////////////////////////////////////////
+               return (QContext.getQInstance().getTable(joinTableName).getFields().keySet());
+            }
+         }
+         catch(QException e)
+         {
+            return Collections.emptySet();
+         }
+      }));
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   private static Map<String, QFieldMetaData> getFieldsToKeepForTable(TableView tableView, QTableMetaData cloneTable, AbstractTableActionInput tableActionInput)
+   {
       Map<String, QFieldMetaData> cloneFields = cloneTable.getFields();
       if(cloneFields == null)
       {
@@ -239,52 +371,7 @@ public class CustomizableTableViewsTablePersonalizer implements TableMetaDataPer
             fieldsToKeep.put(fieldName, cloneFields.get(fieldName));
          }
       }
-
-      cloneTable.setFields(fieldsToKeep);
-
-      ///////////////////////////////////////////////////////////
-      // remove field names which aren't present from sections //
-      ///////////////////////////////////////////////////////////
-      for(QFieldSection section : CollectionUtils.nonNullList(cloneTable.getSections()))
-      {
-         if(section.getFieldNames() != null)
-         {
-            section.getFieldNames().removeIf(next -> !fieldsToKeep.containsKey(next));
-         }
-      }
-
-      //////////////////////////////////////////////////////////
-      // remove sections that had all of their fields removed //
-      //////////////////////////////////////////////////////////
-      CollectionUtils.nonNullList(cloneTable.getSections()).removeIf(section ->
-         section.getFieldNames() != null && section.getFieldNames().isEmpty() && !StringUtils.hasContent(section.getWidgetName()));
-
-      //////////////////////////////////////
-      // figure out which widgets we keep //
-      //////////////////////////////////////
-      Set<String> widgetsToKeep = new HashSet<>();
-      for(TableViewWidget tableViewWidget : CollectionUtils.nonNullList(tableView.getWidgets()))
-      {
-         try
-         {
-            String widgetName = tableViewWidget.getWidgetName();
-            widgetsToKeep.add(widgetName);
-         }
-         catch(Exception e)
-         {
-            LOG.warn("Error processing tableViewWidget", e, logPair("widgetName", tableViewWidget.getWidgetName()));
-         }
-      }
-
-      //////////////////////////////////////////////////////
-      // remove sections w/widgets that we aren't keeping //
-      //////////////////////////////////////////////////////
-      if(cloneTable.getSections() != null)
-      {
-         cloneTable.getSections().removeIf(section -> section.getWidgetName() != null && !widgetsToKeep.contains(section.getWidgetName()));
-      }
-
-      return (cloneTable);
+      return fieldsToKeep;
    }
 
 
